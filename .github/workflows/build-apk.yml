@@ -1,0 +1,70 @@
+name: Build Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [master, main]
+    paths:
+      - '**'
+      - '.github/workflows/build-apk.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build OpenVPN Android APK
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Checkout source and all native submodules
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android build tools
+        run: |
+          yes | sdkmanager --licenses >/dev/null
+          sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0" "ndk;30.0.14904198" "cmake;3.22.1"
+
+      - name: Install native build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y swig build-essential pkg-config
+
+      - name: Verify required submodules
+        run: |
+          git submodule status --recursive
+          test -f main/src/main/cpp/openvpn3/client/ovpncli.i
+          test -f main/src/main/cpp/openvpn/CMakeLists.txt || test -d main/src/main/cpp/openvpn
+          test -f main/src/main/cpp/openssl/openssl.cmake
+
+      - name: Make Gradle wrapper executable
+        run: chmod +x ./gradlew
+
+      - name: Build debug APKs
+        run: |
+          ./gradlew --no-daemon --stacktrace             :main:assembleUiOvpn23Debug             :main:assembleUiOvpn2Debug
+
+      - name: Upload APK artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: openvpn-android-debug-apks
+          path: main/build/outputs/apk/**/*.apk
+          if-no-files-found: warn
+          retention-days: 14
