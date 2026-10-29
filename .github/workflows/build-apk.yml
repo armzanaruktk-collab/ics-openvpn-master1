@@ -21,11 +21,33 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:
-      - name: Checkout source and all native submodules
+      - name: Checkout source
         uses: actions/checkout@v4
         with:
-          submodules: recursive
           fetch-depth: 0
+
+      - name: Fetch native OpenVPN dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p main/src/main/cpp
+          clone_if_missing() {
+            local url="$1"
+            local path="$2"
+            if [ ! -f "$path/.git" ] && [ ! -d "$path/.git" ]; then
+              rm -rf "$path"
+              git clone --depth 1 --recurse-submodules "$url" "$path"
+            fi
+          }
+          clone_if_missing https://github.com/schwabe/openvpn.git main/src/main/cpp/openvpn
+          clone_if_missing https://github.com/schwabe/platform_external_openssl.git main/src/main/cpp/openssl
+          clone_if_missing https://github.com/ARMmbed/mbedtls.git main/src/main/cpp/mbedtls
+          clone_if_missing https://github.com/schwabe/openvpn3.git main/src/main/cpp/openvpn3
+          clone_if_missing https://github.com/chriskohlhoff/asio.git main/src/main/cpp/asio
+          clone_if_missing https://github.com/lz4/lz4.git main/src/main/cpp/lz4
+          clone_if_missing https://github.com/fmtlib/fmt.git main/src/main/cpp/fmt
+          test -f main/src/main/cpp/openvpn3/client/ovpncli.i
+          test -f main/src/main/cpp/openssl/openssl.cmake
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -67,12 +89,6 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y swig build-essential pkg-config
-
-      - name: Verify required submodules
-        run: |
-          git submodule status --recursive
-          test -f main/src/main/cpp/openvpn3/client/ovpncli.i
-          test -f main/src/main/cpp/openssl/openssl.cmake
 
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
