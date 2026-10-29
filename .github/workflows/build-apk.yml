@@ -46,7 +46,18 @@ jobs:
           clone_if_missing https://github.com/chriskohlhoff/asio.git main/src/main/cpp/asio
           clone_if_missing https://github.com/lz4/lz4.git main/src/main/cpp/lz4
           clone_if_missing https://github.com/fmtlib/fmt.git main/src/main/cpp/fmt
-          test -f main/src/main/cpp/openvpn3/client/ovpncli.i
+
+          # This project expects the SWIG interface under client/, while upstream
+          # currently keeps the interface in javacli/. Copy it into the expected path.
+          if [ ! -f main/src/main/cpp/openvpn3/client/ovpncli.i ] && [ -f main/src/main/cpp/openvpn3/javacli/ovpncli.i ]; then
+            cp main/src/main/cpp/openvpn3/javacli/ovpncli.i main/src/main/cpp/openvpn3/client/ovpncli.i
+          fi
+
+          test -f main/src/main/cpp/openvpn3/client/ovpncli.i || {
+            echo "Missing SWIG interface. Available candidates:"
+            find main/src/main/cpp/openvpn3 -name 'ovpncli.i' -print
+            exit 1
+          }
           test -f main/src/main/cpp/openssl/openssl.cmake
 
       - name: Set up Java
@@ -54,6 +65,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
+          cache: gradle
 
       - name: Locate Android SDK tools
         shell: bash
