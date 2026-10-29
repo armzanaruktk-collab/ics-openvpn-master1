@@ -33,22 +33,35 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Configure preinstalled Android SDK
+      - name: Locate Android SDK tools
+        shell: bash
         run: |
-          echo "ANDROID_HOME=/usr/local/lib/android/sdk" >> "$GITHUB_ENV"
-          echo "/usr/local/lib/android/sdk/platform-tools" >> "$GITHUB_PATH"
-          echo "/usr/local/lib/android/sdk/cmdline-tools/16.0/bin" >> "$GITHUB_PATH"
-          test -x /usr/local/lib/android/sdk/cmdline-tools/16.0/bin/sdkmanager
-          /usr/local/lib/android/sdk/cmdline-tools/16.0/bin/sdkmanager --version
+          set -euo pipefail
+          SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          if [ ! -d "$SDK_ROOT" ]; then
+            echo "Android SDK directory not found: $SDK_ROOT"
+            find /usr/local/lib/android /opt -maxdepth 5 -type d -name sdk 2>/dev/null || true
+            exit 1
+          fi
+          SDKMANAGER="$(find "$SDK_ROOT" -type f -name sdkmanager -perm -u+x 2>/dev/null | head -n 1)"
+          if [ -z "$SDKMANAGER" ]; then
+            echo "sdkmanager was not found under $SDK_ROOT"
+            find "$SDK_ROOT" -maxdepth 5 -type f -name sdkmanager -print || true
+            exit 1
+          fi
+          echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "SDKMANAGER_PATH=$SDKMANAGER" >> "$GITHUB_ENV"
+          echo "$SDK_ROOT/platform-tools" >> "$GITHUB_PATH"
+          echo "$(dirname "$SDKMANAGER")" >> "$GITHUB_PATH"
+          echo "Using SDK manager: $SDKMANAGER"
+          "$SDKMANAGER" --version
 
       - name: Install Android build tools
-        env:
-          ANDROID_HOME: /usr/local/lib/android/sdk
+        shell: bash
         run: |
-          set -e
-          SDKMANAGER="$ANDROID_HOME/cmdline-tools/16.0/bin/sdkmanager"
-          yes | "$SDKMANAGER" --licenses >/dev/null || true
-          "$SDKMANAGER" "platform-tools" "platforms;android-36" "build-tools;36.0.0" "ndk;30.0.14904198" "cmake;3.22.1"
+          set -euo pipefail
+          yes | "$SDKMANAGER_PATH" --licenses >/dev/null || true
+          "$SDKMANAGER_PATH" "platform-tools" "platforms;android-36" "build-tools;36.0.0" "ndk;30.0.14904198" "cmake;3.22.1"
 
       - name: Install native build dependencies
         run: |
